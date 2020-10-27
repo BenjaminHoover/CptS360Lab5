@@ -83,7 +83,28 @@ void getPathnames(char *env[]) {
     } // end of large while loop
 }
 
-void decomposeLine() {
+int decomposeLine()
+{
+    char *s;
+    char *l;
+    int i = 0;
+    l = line;
+
+    while (s = strtok_r(l, " ", &l))
+    {
+        if ((strcmp(s, "\n")==0) || (strcmp(s, "")==0) || (strcmp(s, " ")==0))
+        {
+            name[i] = NULL;
+            break;
+        }
+        //printf("debug decomposeLine() 1\n");
+        name[i] = s;
+        i++;
+    }
+    return i;
+}
+
+/*void decomposeLine() {
     int nindex = 1;
     if (line[0] != '\0'){ // get first element in name
         gpath[0] = line[0];
@@ -102,7 +123,7 @@ void decomposeLine() {
    	    }
    	    nindex++;
     }
-}
+}*/
 
 int main(int argc, char *argv[], char *env[]) 
 { 
@@ -157,12 +178,15 @@ int main(int argc, char *argv[], char *env[])
       while(1){
          printf("server ready for next request ....\n");
          n = read(client_sock, line, MAX);
+         printf("line = %s\n", line);
          if (n==0){
            printf("server: client died, server loops\n");
            close(cfd);
            break;
          }
+         printf("line = %s\n", line);
          line[n]=0;
+         printf("line = %s\n", line);
          printf("server: read  n=%d bytes; line=[%s]\n", n, line);
 
         /*int index = 0;
@@ -171,11 +195,12 @@ int main(int argc, char *argv[], char *env[])
         char tail[64];
         int sum;*/
 
-        getPathnames(env);
+        //getPathnames(env);
+        //decomposeLine();
         decomposeLine();
 
-        if (line[0] != NULL) {
-          switch (findCmd(line[0])) {
+        if (name[0] != NULL) {
+          switch (findCmd(name[0])) {
               case 0:
                 printf("get\n");
               break; // get
