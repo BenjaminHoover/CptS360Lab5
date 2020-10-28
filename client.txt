@@ -26,8 +26,8 @@ char gpath[MAX];   // gpath[ ] stores token strings
 char *name[64];
 int  ntoken;
 
-//               0       1      2      3       4         5        6       
-char *cmd[] = {"lcat", "lls", "lcd", "lpwd", "lmkdir", "lrmdir", "lrm", 0};
+//               0       1      2      3       4         5        6       7      8
+char *cmd[] = {"lcat", "lls", "lcd", "lpwd", "lmkdir", "lrmdir", "lrm", "get", "put", 0};
 
 struct sockaddr_in saddr; 
 int sock, r, n;
@@ -103,6 +103,7 @@ int main(int argc, char *argv[], char *env[])
 { 
     int n; char how[64];
     int i;
+    char *$HOME = getenv("HOME");
 
     printf("1. create a socket\n");
     sock = socket(AF_INET, SOCK_STREAM, 0); 
@@ -151,39 +152,72 @@ int main(int argc, char *argv[], char *env[])
     }
 
     if (name[0] != NULL) {
+      int r = 0;
         switch (findCmd(name[0])) {
             case 0:
               printf("lcat\n");
+              //cat(name[1]);
             break; // lcat
             case 1:
               printf("lls\n");
+              //ls(name[1]);
             break; // lls
             case 2:
               printf("lcd\n");
+              if (name[1] == NULL) {
+                r = chdir($HOME);
+              } else {
+                r = chdir(name[1]);
+              }
             break; // lcd
             case 3:
               printf("lpwd\n");
+              r = getcwd(name[1], sizeof(name[1]));
+              //pwd(name[1]);
             break; // lpwd
             case 4: 
               printf("lmkdir\n");
+              r = mkdir(name[1], 0776);
             break; // lmkdir
             case 5:
-              printf("lmdir\n");
+              printf("lrmdir\n");
+              r = rmdir(name[1]);
             break; // lrmdir
             case 6:
               printf("lrm\n");
+              r = unlink(name[1]);
             break; // lrm
-            default: // send to server for it to check
-              printf("default\n");
-            }
-        }
-      // Send ENTIRE line to server
-      n = write(sock, line, MAX);
-      printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
+            case 7:
+              printf("get\n");
+              // Send ENTIRE line to server
+              n = write(sock, line, MAX);
+              printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
 
-      // Read a line from sock and show it
-      n = read(sock, ans, MAX);
-      printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+              // Read a line from sock and show it
+              n = read(sock, ans, MAX);
+              printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+            break; // get
+            case 8:
+              printf("put\n");
+              // Send ENTIRE line to server
+              n = write(sock, line, MAX);
+              printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
+
+              // Read a line from sock and show it
+              n = read(sock, ans, MAX);
+              printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+            break; // put
+            default: // send to server for it to check
+              printf("default\n");  
+              // Send ENTIRE line to server
+              n = write(sock, line, MAX);
+              printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
+
+              // Read a line from sock and show it
+              n = read(sock, ans, MAX);
+              printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+        }
+      }
     }
 }
 
