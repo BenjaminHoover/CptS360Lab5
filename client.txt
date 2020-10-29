@@ -140,6 +140,7 @@ int mycat() {
 int main(int argc, char *argv[], char *env[]) 
 { 
     int n; char how[64];
+    char eot[MAX];
     int i;
     char *$HOME = getenv("HOME");
 
@@ -161,10 +162,6 @@ int main(int argc, char *argv[], char *env[])
         printf("connection with the server failed...\n"); 
         exit(0); 
     } 
-    //n = write(sock, "TEST", MAX);
-
-    // Get Pathnames
-    //getPathnames(env);
 
     while (1){
      for (int i = 0; i < 128; i++) {
@@ -174,6 +171,12 @@ int main(int argc, char *argv[], char *env[])
      }
      //gpath[0] = '\0';
      ntoken = 0;
+
+      strcpy(eot, "ENDOFTRANSFER");
+      strcat(eot, $HOME);
+      strcat(eot, "ENDOFTRANSFER");
+      printf("eot: %s\n", eot);
+      n = write(sock, eot, MAX);
 
       printf("input a line : ");
       fgets(line, MAX, stdin);
@@ -249,12 +252,14 @@ int main(int argc, char *argv[], char *env[])
                   write(gd, cbuf, br);
                   bytesRead += br;
                 }
+                close (gd);
                 printf("Copy complete\n");
               }
             break; // get
             case 8:
               printf("put\n");
-              int fileSize = 0, fd;
+              fileSize = 0; 
+              int fd;
               char sbuf[BLKSIZE];
               // Send ENTIRE line to server
               if (((fd = (open(name[1], O_RDONLY))) < 0)) { 
@@ -268,6 +273,7 @@ int main(int argc, char *argv[], char *env[])
                 while (n = read(fd, sbuf, BLKSIZE)) {
                   n = write(sock, sbuf, BLKSIZE); // send size
                 }
+                close(fd);
                 printf("Transfer Complete\n");
               }
             break; // put
@@ -277,9 +283,14 @@ int main(int argc, char *argv[], char *env[])
               n = write(sock, line, MAX);
               printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
 
-              // Read a line from sock and show it
-              n = read(sock, ans, MAX);
-              printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+              // Read output from server
+              printf("Server return:\n");
+              do {
+                n = read(sock, ans, MAX);
+                if (strcmp(ans, eot) != 0) {
+                  printf("%s\n", ans);
+                }
+              } while (strcmp(ans, eot) != 0);
         }
       }
     }
