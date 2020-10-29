@@ -1,4 +1,5 @@
 // CptS 360 - Lab 5 - server.c
+// Base Code references from K.C Wang, and his textbook: Systems Programming in Unix/Linux
 // Contributers: Jonathan Coronado, Benjamin Hoover
 // About lab: This lab handles filesystem commands from client to server
 // About file: This file in particular handles the server side.
@@ -30,7 +31,7 @@ char cwd[MAX];  // stores cwd
 char virtualRoot[MAX]; // stores virtualroot as initial cwd
 int  ndir;      // stores the number of directories
 
-
+struct stat st;
 
 //char gpath[MAX];   // gpath[ ] stores token strings
 char *name[64];
@@ -144,6 +145,9 @@ int main(int argc, char *argv[], char *env[])
       for (int i = 0; i < MAX; i++) {
      	  name[i] = NULL;
       }
+      for (int i = 0; i < BLK; i++) {
+        line[i] = NULL;
+      }
 
       // Read line from client_sock into line
       printf("server ready for next request ....\n");
@@ -172,40 +176,59 @@ int main(int argc, char *argv[], char *env[])
         case 0: // get
           printf("get\n");
           
-          struct stat fstat;
-
+          //struct stat fstat;
           char fileLine1[MAX];
-          int fd1 = open(name[1],O_RDONLY);
-          snprintf(fileLine1, sizeof(fileLine1), "%zu", fstat.st_size);
+          int fd1, size, found = 0;
+          fd1 = open(name[1], O_RDONLY);
+          if (fd1 < 0) {
+            printf("File not found"); 
+            write(client_sock, &found, sizeof(found)); // write file not found
+          } else { // file found and opened
+            printf("inside else statement\n");
+            found = 1; 
+            write(client_sock, &found, sizeof(found)); // write file found
+            stat(name[1], &st);
+            int size = st.st_size;
+            //snprintf(size, sizeof(fileLine1), "%zu", st.st_size);
+            write(client_sock, &size, sizeof(size)); // send size
 
-          write(client_sock, fileLine1, n);
-
-          while(n = read(fd1, fileLine1, MAX)){
-            write(client_sock, fileLine1, n);
-            c += n;
+            read(client_sock, &found, sizeof(found)); // file created on client?
+            printf("Confirmed client created file\n");
+            if (found == 2) {
+              while(n = read(fd1, fileLine1, MAX)){ // get info from server file
+                write(client_sock, fileLine1, n); // send info
+              }
+            }
+            close(fd1);
           }
-          close(fd1);
 
-          n = write(client_sock, eot, MAX);
-          break; 
+          break;
+          //n = write(client_sock, eot, MAX);
         case 1: // put
+          c = 0;
           printf("put\n");
 
           char fileLine2[MAX];
-          int fd2 = open(name[1], O_WRONLY | O_CREAT, 0644);
-          if(!(fd2 >= 0)){
+          int fd2, fileSize = 0;
+          fd2 = open(name[1], O_WRONLY | O_CREAT, 0644);
+          if(fd2 < 0){ // attempt to open file
             printf("File creation failed.\n");
-            exit(1);
-          }
-          read(client_sock, fileLine2, MAX);
-          size = atoi(line);
-          while(c < size) {
-            n = read(client_sock, fileLine2, MAX);
-            c += n;
-            write(fd2, fileLine2, n);
-          }
+            //exit(1);
+          } else { // file found/created
+            int created = 1;
+            write(client_sock, &created, sizeof(created)); // write creation successful
+            read(client_sock, &fileSize, MAX); // get size
+            //size = fileSize;
+            printf("Size = %d, fd2 = %d\n", fileSize, fd2);
+            while(c < fileSize) { // get data
+              n = read(client_sock, fileLine2, MAX);
+              c += n;
+              write(fd2, fileLine2, n);
+            }
           close(fd2);
-          n = write(client_sock, eot, MAX);
+          printf("Copy complete\n");
+          }
+          //n = write(client_sock, eot, MAX);
           break;
         case 2: // ls
           printf("ls\n");
@@ -440,7 +463,6 @@ int main(int argc, char *argv[], char *env[])
           getcwd(cwd, MAX);
           printf("cwd = %s\n", cwd);
           n = write(client_sock, cwd, MAX);
-
           n = write(client_sock, eot, MAX);
           break;
         case 5: // mkdir
