@@ -1,3 +1,8 @@
+// CptS 360 - Lab 5 - client.c
+// Contributers: Jonathan Coronado, Benjamin Hoover
+// About lab: This lab handles filesystem commands for client to server
+// About file: This file in particular handles the client side.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -119,7 +124,6 @@ int mycat() {
             }
           } else if (name[i+1] != NULL && strcmp(name[i+2], ">") == 0 && name[i+3] != NULL) { //copy file content
             int gd, n, total = 0;
-            //if (name[i+3] == NULL) { return 0; }
             if (((fd = (open(name[i+1], O_RDONLY))) < 0)) { printf("File not found\n"); return 0; }
             if (((gd = open(name[i+3], O_WRONLY|O_CREAT, 0644)) < 0) || (gd == fd)) {
               printf("File not found\n");
@@ -371,42 +375,51 @@ int main(int argc, char *argv[], char *env[])
               n = write(sock, line, MAX);
               printf("client: wrote n=%d bytes; line=(%s)\n", n, line); // send request to server
 
-              int fileSize = 0, bytesRead = 0, gd, br;
+              int fileSize = 0, bytesRead = 0, gd, found = 0;
               char cbuf[BLKSIZE];
-              // Read a line from sock
-              n = read(sock, fileSize, MAX);
-              printf("Filesize = %s \n", fileSize);
-              if ((gd = open(name[1], O_WRONLY|O_CREAT, 0644)) < 0) {
-                printf("File not opened\n");
-              } else { // begin copying
-                while (fileSize > bytesRead) {// read whole file
-                  n = read(sock, cbuf, MAX);
-                  write(gd, cbuf, br);
-                  bytesRead += br;
+              read(sock, &found, sizeof(found)); // file found server side?
+              if (found == 1) {
+                read(sock, &fileSize, MAX); // get filesize
+                printf("Filesize = %d \n", fileSize);
+                if ((gd = open(name[1], O_WRONLY|O_CREAT, 0644)) < 0) {
+                  printf("File not opened\n");
+                  write(sock, &found, sizeof(found)); // file not created, don't send info
+                } else { // begin copying
+                  found = 2;
+                  write(sock, &found, sizeof(found)); // file created, send info
+                  while (fileSize > bytesRead) {// read whole file
+                    n = read(sock, cbuf, MAX); // read from sock
+                    write(gd, cbuf, n); // write to file
+                    bytesRead += n;
+                  }
+                  close (gd);
+                  printf("Copy complete\n");
                 }
-                close (gd);
-                printf("Copy complete\n");
               }
             break; // get
             case 8:
               printf("put\n");
               fileSize = 0; 
-              int fd;
-              char sbuf[BLKSIZE];
+              int fd, fcreated = 0;
+              char sbuf[MAX];
               // Send ENTIRE line to server
               if (((fd = (open(name[1], O_RDONLY))) < 0)) { 
                 printf("File not found\n"); 
               } else { // begin transfer
                 n = write(sock, line, MAX); // send name and command
-                stat(name[1], &st);
-                n = write(sock, st.st_size, MAX); // send size
-                printf("client: put %s of %d bytes\n", name[1], st.st_size);
-                
-                while (n = read(fd, sbuf, BLKSIZE)) {
-                  n = write(sock, sbuf, BLKSIZE); // send size
-                }
-                close(fd);
-                printf("Transfer Complete\n");
+                read(sock, &fcreated, MAX);
+                if (fcreated == 1) {
+                  stat(name[1], &st);
+                  int size = st.st_size;
+                  n = write(sock, &size, sizeof(size)); // send size
+                  printf("client: put %s of %d bytes\n", name[1], size);
+                  
+                  while (n = read(fd, sbuf, MAX)) {
+                    write(sock, sbuf, n); // send info
+                  }
+                  close(fd);
+                  printf("Transfer Complete\n");
+                } else { printf("File creation failed\n"); }
               }
             break; // put
             default: // send to server for it to check
