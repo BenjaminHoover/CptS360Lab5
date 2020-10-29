@@ -36,6 +36,8 @@ struct sockaddr_in saddr;
 int sock, r, n;
 char line[MAX], ans[MAX];
 
+struct stat st;
+
 int findCmd(char *command)
 {
    int i = 0;
@@ -239,24 +241,35 @@ int main(int argc, char *argv[], char *env[])
               // Read a line from sock
               n = read(sock, fileSize, MAX);
               printf("Filesize = %s \n", fileSize);
-              if ((gd = open(name[i+3], O_WRONLY|O_CREAT, 0644)) < 0) {
+              if ((gd = open(name[1], O_WRONLY|O_CREAT, 0644)) < 0) {
                 printf("File not opened\n");
-              }
-              while (fileSize > bytesRead) {// read whole file
-                n = read(sock, ans, MAX);
-                write(gd, cbuf, br);
-                bytesRead += br;
+              } else { // begin copying
+                while (fileSize > bytesRead) {// read whole file
+                  n = read(sock, cbuf, MAX);
+                  write(gd, cbuf, br);
+                  bytesRead += br;
+                }
+                printf("Copy complete\n");
               }
             break; // get
             case 8:
               printf("put\n");
+              int fileSize = 0, fd;
+              char sbuf[BLKSIZE];
               // Send ENTIRE line to server
-              n = write(sock, line, MAX);
-              printf("client: wrote n=%d bytes; line=(%s)\n", n, line);
-
-              // Read a line from sock and show it
-              n = read(sock, ans, MAX);
-              printf("client: read  n=%d bytes; echo=(%s)\n",n, ans);
+              if (((fd = (open(name[1], O_RDONLY))) < 0)) { 
+                printf("File not found\n"); 
+              } else { // begin transfer
+                n = write(sock, line, MAX); // send name and command
+                stat(name[1], &st);
+                n = write(sock, st.st_size, MAX); // send size
+                printf("client: put %s of %d bytes\n", name[1], st.st_size);
+                
+                while (n = read(fd, sbuf, BLKSIZE)) {
+                  n = write(sock, sbuf, BLKSIZE); // send size
+                }
+                printf("Transfer Complete\n");
+              }
             break; // put
             default: // send to server for it to check
               printf("default\n");  
