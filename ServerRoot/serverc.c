@@ -27,6 +27,7 @@
 
 DIR *dir;       // dir stores DIR structures
 char cwd[MAX];  // stores cwd
+char virtualRoot[MAX]; // stores virtualroot as initial cwd
 int  ndir;      // stores the number of directories
 
 
@@ -88,6 +89,7 @@ int main(int argc, char *argv[], char *env[])
 
   // get cwd
   getcwd(cwd, MAX);
+  strcpy(virtualRoot, cwd);
     
   // Create Socket
   printf("1. create a socket\n");
@@ -132,11 +134,12 @@ int main(int argc, char *argv[], char *env[])
     printf("-----------------------------------------------\n");
     printf("    IP=%s  port=%d\n", "127.0.0.1", ntohs(caddr.sin_port));
     printf("-----------------------------------------------\n");
-
+    
+    char eot[MAX];
+    n = read (client_sock, eot, MAX);
     // Processing loop
     while(1){
       int c = 0, size = 0;
-      
       // Clean name
       for (int i = 0; i < MAX; i++) {
      	  name[i] = NULL;
@@ -183,6 +186,7 @@ int main(int argc, char *argv[], char *env[])
           }
           close(fd1);
 
+          n = write(client_sock, eot, MAX);
           break; 
         case 1: // put
           printf("put\n");
@@ -201,25 +205,34 @@ int main(int argc, char *argv[], char *env[])
             write(fd2, fileLine2, n);
           }
           close(fd2);
+          n = write(client_sock, eot, MAX);
           break;
         case 2: // ls
           printf("ls\n");
-
+          char temp[MAX];
+          strcpy(temp, "\0");
           // if just ls, print cwd
           if(!name[1]){
             printf("Printing CWD...\n");
+            n = write(client_sock, "Printing CWD...\n", MAX);
             dir = opendir(".");
 
+            strcpy(temp, "\0");
             while ((entry = readdir(dir))){
               printf("%s ", entry->d_name);
+              strcat(temp, entry->d_name);
+              strcat(temp, " ");
             }
+            n = write(client_sock, temp, MAX);
+            strcpy(temp, "\0");
             closedir(dir);
           }
           // else, if name[1] is -l
           else if(strcmp(name[1], "-l") == 0) {
-            
+            strcpy(temp, "\0");
             if(!name[2]){
               printf("Printing CWD...\n");
+              n = write(client_sock, "Printing CWD...\n", MAX);
               dir = opendir(".");
 
               while ((entry = readdir(dir))){
@@ -236,44 +249,72 @@ int main(int argc, char *argv[], char *env[])
                 strcat(filepath, entry->d_name);
 
                 if (!stat(filepath, &fstat)){
-                  if (( file_stats-> st_mode & 0xF000) == 0x8000) // if (S_ISREG()) 
+                  if (( file_stats-> st_mode & 0xF000) == 0x8000) { // if (S_ISREG()) 
                     printf("%c",'-'); 
-                  if (( file_stats-> st_mode & 0xF000) == 0x4000) // if (S_ISDIR()) 
+                    strcat(temp, "-"); }
+                  if (( file_stats-> st_mode & 0xF000) == 0x4000) { // if (S_ISDIR()) 
                     printf("%c",'d'); 
-                  if (( file_stats-> st_mode & 0xF000) == 0xA000) // if (S_ISLNK()) 
-                    printf("%c",'l'); 
-
+                    strcat(temp, "d"); }
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000) { // if (S_ISLNK()) 
+                    printf("%c",'l');
+                    strcat(temp, "l"); }
                   for (int i = 8; i >= 0; i--){
-                    if (file_stats-> st_mode & (1 << i)) // print r | w | x 
-                      printf("%c", t1[ i]); 
-                    else 
-                      printf("%c", t2[ i]); 
+                    if (file_stats-> st_mode & (1 << i)) {// print r | w | x 
+                      printf("%c", t1[i]);
+                      strncat(temp, &t1[i], 1); 
+                    } else {
+                      printf("%c", t2[i]);
+                      strncat(temp, &t2[i], 1); 
+                    }
                   } 
 
-                  printf("%4ld ", file_stats-> st_nlink); // link count 
+                  char temp2[MAX];
+                  strcat(temp, " ");
+                  printf("%4ld ", file_stats-> st_nlink); // link count
+                  sprintf(temp2, "%d" ,file_stats-> st_nlink);
+                  strcat(temp, temp2); 
+                  strcat(temp, " ");
                   printf("%4d ", file_stats-> st_gid); // gid 
+                  sprintf(temp2, "%d" ,file_stats-> st_gid);
+                  strcat(temp, temp2);
+                  strcat(temp, " ");
                   printf("%4d ", file_stats-> st_uid); // uid 
+                  sprintf(temp2, "%d" ,file_stats-> st_uid);
+                  strcat(temp, temp2);
+                  strcat(temp, " ");
                   printf("%8ld ", file_stats-> st_size); // file size 
+                  sprintf(temp2, "%d" ,file_stats-> st_size);
+                  strcat(temp, temp2);
+                  strcat(temp, " ");
 
                   strcpy( ftime, ctime(& file_stats-> st_ctime) ); // print time in calendar form 
                   ftime[ strlen( ftime)-1] = 0; // kill \n at end 
                   printf("%s ", ftime); // print time
-
+                  strcat(temp, ftime);
+                  strcat(temp, " ");
                   printf("%s ", entry->d_name); // print name of file
+                  strcat(temp,  entry->d_name);
+                  strcat(temp, " ");
 
                   // print -> linkname if symbolic file 
                   if (( file_stats-> st_mode & 0xF000) == 0xA000){ 
                     // use readlink() to read linkname 
                     readlink(filepath ,linkname, linkSize);
-                    printf("-> %s", linkname ); // print linked name 
+                    printf("-> %s", linkname ); // print linked name
+                    strcat(temp, "-> "); 
+                    strcat(temp, linkname); 
                   }
                   printf("\n");
                 }
+                n = write(client_sock, temp, MAX);
+                strcpy(temp, "\0");
               }
               closedir(dir);
             }
             else {
+              strcpy(temp, "\0");
               printf("Printing given dir...");
+              strcat(temp, "Printing given dir...");
               dir = opendir(name[2]);
 
               while ((entry = readdir(dir))){
@@ -290,100 +331,149 @@ int main(int argc, char *argv[], char *env[])
                 strcat(filepath, entry->d_name);
 
                 if (!stat(filepath, &fstat)){
-                  if (( file_stats-> st_mode & 0xF000) == 0x8000) // if (S_ISREG()) 
-                    printf("%c",'-'); 
-                  if (( file_stats-> st_mode & 0xF000) == 0x4000) // if (S_ISDIR()) 
-                    printf("%c",'d'); 
-                  if (( file_stats-> st_mode & 0xF000) == 0xA000) // if (S_ISLNK()) 
-                    printf("%c",'l'); 
+                  if (( file_stats-> st_mode & 0xF000) == 0x8000) { // if (S_ISREG()) 
+                    printf("%c",'-');
+                    strcat(temp, "-"); }
+                  if (( file_stats-> st_mode & 0xF000) == 0x4000) { // if (S_ISDIR()) 
+                    printf("%c",'d');
+                    strcat(temp, "d"); }
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000) { // if (S_ISLNK()) 
+                    printf("%c",'l');
+                    strcat(temp, "l"); }
 
                   for (int i = 8; i >= 0; i--){
-                    if (file_stats-> st_mode & (1 << i)) // print r | w | x 
-                      printf("%c", t1[ i]); 
-                    else 
-                      printf("%c", t2[ i]); 
+                    if (file_stats-> st_mode & (1 << i)) {// print r | w | x 
+                      printf("%c", t1[i]);
+                      strncat(temp, &t1[i], 1); 
+                    } else { 
+                      printf("%c", t2[i]);
+                      strncat(temp, &t2[i], 1); 
+                    }
                   } 
 
-                  printf("%4ld ", file_stats-> st_nlink); // link count 
-                  printf("%4d ", file_stats-> st_gid); // gid 
-                  printf("%4d ", file_stats-> st_uid); // uid 
-                  printf("%8ld ", file_stats-> st_size); // file size 
+                  char temp2[MAX];
+                  strcat(temp, " ");
+                  printf("%4ld ", file_stats-> st_nlink); // link count
+                  sprintf(temp2, "%d" ,file_stats-> st_nlink);
+                  strcat(temp, temp2); 
+                  printf("%4d ", file_stats-> st_gid); // gid
+                  sprintf(temp2, "%d" ,file_stats-> st_gid);
+                  strcat(temp, temp2);
+                  printf("%4d ", file_stats-> st_uid); // uid
+                  sprintf(temp2, "%d" ,file_stats-> st_uid);
+                  strcat(temp, temp2); 
+                  printf("%8ld ", file_stats-> st_size); // file size
+                  sprintf(temp2, "%d" ,file_stats-> st_size);
+                  strcat(temp, temp2); 
 
                   strcpy( ftime, ctime(& file_stats-> st_ctime) ); // print time in calendar form 
                   ftime[ strlen( ftime)-1] = 0; // kill \n at end 
                   printf("%s ", ftime); // print time
+                  strcat(temp, ftime);
 
                   printf("%s ", entry->d_name); // print name of file
+                  strcat(temp, entry->d_name);
 
                   // print -> linkname if symbolic file 
                   if (( file_stats-> st_mode & 0xF000) == 0xA000){ 
                     // use readlink() to read linkname 
                     readlink(filepath ,linkname, linkSize);
-                    printf("-> %s", linkname ); // print linked name 
+                    printf("-> %s", linkname ); // print linked name
+                    strcat(temp, "-> ");
+                    strcat(temp, linkname); 
                   }
                   printf("\n");
                 }
+                n = write(client_sock, temp, MAX);
+                strcpy(temp, "\0");
               }
               closedir(dir);
             }
           }
           //else, print directory in name[1]
           else {
+            strcpy(temp, "\0");
             printf("Printing given dir...");
+            strcat(temp, "Printing given dir...");
             dir = opendir(name[1]);
 
             while ((entry = readdir(dir))){
               printf("%s ", entry->d_name);
+              strcat(temp, entry->d_name);
+              strcat(temp, " ");
             }
+            n = write(client_sock, temp, MAX);
             closedir(dir);
           }
           printf("\n");
-
+          n = write(client_sock, eot, MAX);
           break;
         case 3: // cd
           printf("cd\n");
-          
+
+          getcwd(cwd, MAX);
           // if argument name[1] is not empty
-          if (strcmp(name[1], "")){
-            chdir(name[1]);
-            getcwd(cwd, MAX);
-            printf("cwd = %s\n", cwd);
+          if (name[1]){
+            if(((strcmp(name[1], "..") == 0) || (strcmp(name[1], "../") == 0)) && (strcmp(cwd, virtualRoot) == 0)){
+              chdir(virtualRoot);
+              getcwd(cwd, MAX);
+              printf("cwd after cd = %s\n", cwd);
+            }
+            else if (chdir(name[1]) == 0){
+              getcwd(cwd, MAX);
+              printf("cwd after cd = %s\n", cwd);
+            }
+            else{
+              printf("Invalid directory.\n");
+            }
           }
           else{
-            printf("Invalid directory.\n");
+            chdir(virtualRoot);
+            getcwd(cwd, MAX);
+            printf("cwd after cd = %s\n", cwd);
           }
+          n = write(client_sock, eot, MAX);
           break;
         case 4: // pwd
           printf("pwd\n");
 
           getcwd(cwd, MAX);
           printf("cwd = %s\n", cwd);
+          n = write(client_sock, cwd, MAX);
+
+          n = write(client_sock, eot, MAX);
           break;
         case 5: // mkdir
           printf("mkdir\n");
 
           mkdir(name[1], 0755);
+          n = write(client_sock, eot, MAX);
           break;
         case 6: // rmdir
           printf("rmdir\n");
 
           rmdir(name[1]);
+          n = write(client_sock, eot, MAX);
           break;
         case 7: // rm
           printf("rm\n");
           
           unlink(name[1]);
+          n = write(client_sock, eot, MAX);
           break;
         case 8: // exit
+          n = write(client_sock, eot, MAX);
           return 0;
           break;
         default: // do whatever
           printf("default\n");
+          n = write(client_sock, eot, MAX);
         } // end of switch statement
       } // end of if statement
 
       // send the echo line to client 
-      n = write(client_sock, line, MAX);
+      //n = write(client_sock, line, MAX);
+      //n = write(client_sock, eot, MAX);
 
       printf("server: wrote n=%d bytes; ECHO=[%s]\n", n, line);
       printf("server: ready for next request\n");
