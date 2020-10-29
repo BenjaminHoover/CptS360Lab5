@@ -25,11 +25,13 @@
 #define PORT 1234 
 #define BLK 1024
 
-DIR *dir;    // dir stores DIR structures
-char cwd[MAX]; // stores cwd
-int  ndir;
+DIR *dir;       // dir stores DIR structures
+char cwd[MAX];  // stores cwd
+int  ndir;      // stores the number of directories
 
-char gpath[MAX];   // gpath[ ] stores token strings
+
+
+//char gpath[MAX];   // gpath[ ] stores token strings
 char *name[64];
 int  ntoken;
 
@@ -133,6 +135,13 @@ int main(int argc, char *argv[], char *env[])
 
     // Processing loop
     while(1){
+      int c = 0, size = 0;
+      
+      // Clean name
+      for (int i = 0; i < MAX; i++) {
+     	  name[i] = NULL;
+      }
+
       // Read line from client_sock into line
       printf("server ready for next request ....\n");
       n = read(client_sock, line, MAX);
@@ -159,9 +168,39 @@ int main(int argc, char *argv[], char *env[])
         switch (findCmd(name[0])) {
         case 0: // get
           printf("get\n");
+          
+          struct stat fstat;
+
+          char fileLine1[MAX];
+          int fd1 = open(name[1],O_RDONLY);
+          snprintf(fileLine1, sizeof(fileLine1), "%zu", fstat.st_size);
+
+          write(client_sock, fileLine1, n);
+
+          while(n = read(fd1, fileLine1, MAX)){
+            write(client_sock, fileLine1, n);
+            c += n;
+          }
+          close(fd1);
+
           break; 
         case 1: // put
           printf("put\n");
+
+          char fileLine2[MAX];
+          int fd2 = open(name[1], O_WRONLY | O_CREAT, 0644);
+          if(!(fd2 >= 0)){
+            printf("File creation failed.\n");
+            exit(1);
+          }
+          read(client_sock, fileLine2, MAX);
+          size = atoi(line);
+          while(c < size) {
+            n = read(client_sock, fileLine2, MAX);
+            c += n;
+            write(fd2, fileLine2, n);
+          }
+          close(fd2);
           break;
         case 2: // ls
           printf("ls\n");
@@ -176,8 +215,120 @@ int main(int argc, char *argv[], char *env[])
             }
             closedir(dir);
           }
-          // else, print input dir after the ls
-          else{
+          // else, if name[1] is -l
+          else if(strcmp(name[1], "-l") == 0) {
+            
+            if(!name[2]){
+              printf("Printing CWD...\n");
+              dir = opendir(".");
+
+              while ((entry = readdir(dir))){
+                getcwd(cwd, MAX);
+                char *filepath = cwd;
+                char ftime[64];
+                char *t1 = "xwrxwrxwr-------"; 
+                char *t2 = "----------------";
+                char linkname[256];
+                int linkSize = sizeof(linkname);
+                struct stat fstat, *file_stats;
+                file_stats = &fstat;
+                strcat(filepath, "/");
+                strcat(filepath, entry->d_name);
+
+                if (!stat(filepath, &fstat)){
+                  if (( file_stats-> st_mode & 0xF000) == 0x8000) // if (S_ISREG()) 
+                    printf("%c",'-'); 
+                  if (( file_stats-> st_mode & 0xF000) == 0x4000) // if (S_ISDIR()) 
+                    printf("%c",'d'); 
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000) // if (S_ISLNK()) 
+                    printf("%c",'l'); 
+
+                  for (int i = 8; i >= 0; i--){
+                    if (file_stats-> st_mode & (1 << i)) // print r | w | x 
+                      printf("%c", t1[ i]); 
+                    else 
+                      printf("%c", t2[ i]); 
+                  } 
+
+                  printf("%4ld ", file_stats-> st_nlink); // link count 
+                  printf("%4d ", file_stats-> st_gid); // gid 
+                  printf("%4d ", file_stats-> st_uid); // uid 
+                  printf("%8ld ", file_stats-> st_size); // file size 
+
+                  strcpy( ftime, ctime(& file_stats-> st_ctime) ); // print time in calendar form 
+                  ftime[ strlen( ftime)-1] = 0; // kill \n at end 
+                  printf("%s ", ftime); // print time
+
+                  printf("%s ", entry->d_name); // print name of file
+
+                  // print -> linkname if symbolic file 
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000){ 
+                    // use readlink() to read linkname 
+                    readlink(filepath ,linkname, linkSize);
+                    printf("-> %s", linkname ); // print linked name 
+                  }
+                  printf("\n");
+                }
+              }
+              closedir(dir);
+            }
+            else {
+              printf("Printing given dir...");
+              dir = opendir(name[2]);
+
+              while ((entry = readdir(dir))){
+                getcwd(cwd, MAX);
+                char *filepath = cwd;
+                char ftime[64];
+                char *t1 = "xwrxwrxwr-------"; 
+                char *t2 = "----------------";
+                char linkname[256];
+                int linkSize = sizeof(linkname);
+                struct stat fstat, *file_stats;
+                file_stats = &fstat;
+                strcat(filepath, "/");
+                strcat(filepath, entry->d_name);
+
+                if (!stat(filepath, &fstat)){
+                  if (( file_stats-> st_mode & 0xF000) == 0x8000) // if (S_ISREG()) 
+                    printf("%c",'-'); 
+                  if (( file_stats-> st_mode & 0xF000) == 0x4000) // if (S_ISDIR()) 
+                    printf("%c",'d'); 
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000) // if (S_ISLNK()) 
+                    printf("%c",'l'); 
+
+                  for (int i = 8; i >= 0; i--){
+                    if (file_stats-> st_mode & (1 << i)) // print r | w | x 
+                      printf("%c", t1[ i]); 
+                    else 
+                      printf("%c", t2[ i]); 
+                  } 
+
+                  printf("%4ld ", file_stats-> st_nlink); // link count 
+                  printf("%4d ", file_stats-> st_gid); // gid 
+                  printf("%4d ", file_stats-> st_uid); // uid 
+                  printf("%8ld ", file_stats-> st_size); // file size 
+
+                  strcpy( ftime, ctime(& file_stats-> st_ctime) ); // print time in calendar form 
+                  ftime[ strlen( ftime)-1] = 0; // kill \n at end 
+                  printf("%s ", ftime); // print time
+
+                  printf("%s ", entry->d_name); // print name of file
+
+                  // print -> linkname if symbolic file 
+                  if (( file_stats-> st_mode & 0xF000) == 0xA000){ 
+                    // use readlink() to read linkname 
+                    readlink(filepath ,linkname, linkSize);
+                    printf("-> %s", linkname ); // print linked name 
+                  }
+                  printf("\n");
+                }
+              }
+              closedir(dir);
+            }
+          }
+          //else, print directory in name[1]
+          else {
             printf("Printing given dir...");
             dir = opendir(name[1]);
 
